@@ -1,8 +1,8 @@
-# 🚆 MargManthan
+# 🚆 Marg-Manthan
 
 > A fast and efficient railway route search engine for Indian Railways.
 
-MargManthan is a railway route planning system that enables users to search for trains, explore routes between stations, and efficiently query railway timetable data. The project preprocesses raw IRCTC timetable data into optimized data structures to ensure fast and scalable route searches.
+Marg-Manthan is a railway route planning system that enables users to search for trains, explore routes between stations, and efficiently query railway timetable data. The project preprocesses raw IRCTC timetable data into optimized data structures to ensure fast and scalable route searches.
 
 ---
 
@@ -34,7 +34,7 @@ MargManthan is a railway route planning system that enables users to search for 
 ## 📂 Project Structure
 
 ```text
-MargManthan/
+Marg-Manthan/
 │
 ├── data/
 │   ├── raw/
@@ -101,8 +101,8 @@ The dataset contains railway timetable information including:
 ### Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/MargManthan.git
-cd MargManthan
+git clone https://github.com/yourusername/Marg-Manthan.git
+cd Marg-Manthan
 ```
 
 ### Install dependencies
@@ -127,17 +127,7 @@ python backend/api.py
 
 ## 📸 Screenshots
 
-### Home Page
-
-_Add screenshot here_
-
-### Route Search
-
-_Add screenshot here_
-
-### Search Results
-
-_Add screenshot here_
+- To be updated
 
 ---
 
