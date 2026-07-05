@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import axios from "axios";
-import { RefreshCw } from "lucide-react";
+
+interface ClassDetail {
+  class_type: string;
+  fare: number;
+  availability_status: string;
+  confirm_probability: string;
+}
 
 interface TrainSegment {
   train_no: number;
@@ -14,11 +20,9 @@ interface TrainSegment {
   travel_time: number;
   departure_date?: string;
   arrival_date?: string;
-  fare?: number;
-  availability_status?: string;
-  confirm_probability?: string;
   from_station_name?: string;
   to_station_name?: string;
+  class_details: ClassDetail[];
 }
 
 interface Route {
@@ -28,7 +32,6 @@ interface Route {
   total_time: number;
   changes: number;
   waiting_time: number;
-  total_fare?: number;
 }
 
 export default function Results() {
@@ -38,7 +41,6 @@ export default function Results() {
   const initialMode = searchParams.get("mode") || "time";
   const date = searchParams.get("date") || "";
   const deadline = searchParams.get("deadline") || "";
-  const travelClass = searchParams.get("class") || "SL";
   const maxBudget = searchParams.get("budget") || "";
 
   const [routes, setRoutes] = useState<Route[]>([]);
@@ -46,10 +48,13 @@ export default function Results() {
   const [error, setError] = useState<string | null>(null);
 
   // Filters
-  const [selectedClasses, setSelectedClasses] = useState<string[]>([travelClass]);
+  const [selectedClasses, setSelectedClasses] = useState<string[]>(["SL", "3A", "2A", "1A", "CC", "2S", "EC"]);
   const [selectedTrainTypes, setSelectedTrainTypes] = useState<string[]>(["ALL"]);
   const [departureTimeFilter, setDepartureTimeFilter] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"time" | "distance" | "changes">("time");
+  
+  // Class selection state: stores active class type per "routeIdx_segIdx"
+  const [activeClass, setActiveClass] = useState<{ [key: string]: string }>({});
   
   // Expanded card tracking
   const [expandedCards, setExpandedCards] = useState<{ [key: number]: boolean }>({});
@@ -60,10 +65,22 @@ export default function Results() {
       setError(null);
       try {
         const response = await axios.get(
-          `http://localhost:3000/search?source=${source}&destination=${destination}&mode=${initialMode}&date=${date}&deadline=${deadline}&class=${travelClass}&budget=${maxBudget}`
+          `http://localhost:3000/search?source=${source}&destination=${destination}&mode=${initialMode}&date=${date}&deadline=${deadline}&budget=${maxBudget}`
         );
-        setRoutes(response.data.routes || []);
-        setExpandedCards({ 0: true }); // Auto-expand the first card
+        const dataRoutes = response.data.routes || [];
+        setRoutes(dataRoutes);
+        
+        // Auto-expand the first card and initialize default classes
+        const initialClasses: { [key: string]: string } = {};
+        dataRoutes.forEach((route: Route, rIdx: number) => {
+          route.trains.forEach((seg, sIdx) => {
+            if (seg.class_details.length > 0) {
+              initialClasses[`${rIdx}_${sIdx}`] = seg.class_details[0].class_type;
+            }
+          });
+        });
+        setActiveClass(initialClasses);
+        setExpandedCards({ 0: true }); 
       } catch (err: any) {
         console.error("Search failed:", err);
         setError(err.response?.data?.error || "Failed to load journey routes. Check server connection.");
@@ -75,7 +92,7 @@ export default function Results() {
     if (source && destination) {
       fetchRoutes();
     }
-  }, [source, destination, initialMode, date, deadline, travelClass, maxBudget]);
+  }, [source, destination, initialMode, date, deadline, maxBudget]);
 
   const toggleExpand = (idx: number) => {
     setExpandedCards((prev) => ({
@@ -94,6 +111,13 @@ export default function Results() {
     setSelectedClasses(prev =>
       prev.includes(cls) ? prev.filter(c => c !== cls) : [...prev, cls]
     );
+  };
+
+  const handleSelectClass = (routeIdx: number, segIdx: number, clsType: string) => {
+    setActiveClass(prev => ({
+      ...prev,
+      [`${routeIdx}_${segIdx}`]: clsType
+    }));
   };
 
   // Sort and filter logic
@@ -159,14 +183,16 @@ export default function Results() {
           <span className="block text-[8px] uppercase tracking-wider text-slate-300 font-bold">Journey Date</span>
           <span className="text-xs font-black block text-white">{date || "Today"}</span>
         </div>
-        <div className="bg-white/10 dark:bg-black/20 px-3 py-1.5 rounded-lg border border-white/5 min-w-[80px]">
-          <span className="block text-[8px] uppercase tracking-wider text-slate-300 font-bold">Class</span>
-          <span className="text-xs font-black block text-white">{travelClass}</span>
-        </div>
-        <div className="bg-white/10 dark:bg-black/20 px-3 py-1.5 rounded-lg border border-white/5 min-w-[90px]">
+        <div className="bg-white/10 dark:bg-black/20 px-3 py-1.5 rounded-lg border border-white/5 min-w-[100px]">
           <span className="block text-[8px] uppercase tracking-wider text-slate-300 font-bold">Quota</span>
           <span className="text-xs font-black block text-white">GENERAL</span>
         </div>
+        {maxBudget && (
+          <div className="bg-white/10 dark:bg-black/20 px-3 py-1.5 rounded-lg border border-white/5 min-w-[90px]">
+            <span className="block text-[8px] uppercase tracking-wider text-slate-300 font-bold">Max Budget</span>
+            <span className="text-xs font-black block text-emerald-400">₹{maxBudget}</span>
+          </div>
+        )}
         <Link 
           to="/" 
           className="bg-[#fb731c] hover:bg-[#e05f0d] text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase shadow transition-all cursor-pointer text-center"
@@ -184,7 +210,7 @@ export default function Results() {
             <h3 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">Refine Results</h3>
             <button 
               onClick={() => {
-                setSelectedClasses([travelClass]);
+                setSelectedClasses(["SL", "3A", "2A", "1A", "CC", "2S", "EC"]);
                 setDepartureTimeFilter(null);
               }}
               className="text-[10px] text-orange-500 font-bold hover:underline cursor-pointer"
@@ -197,7 +223,7 @@ export default function Results() {
           <div className="space-y-2">
             <h4 className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Journey Class</h4>
             <div className="space-y-1.5 text-xs text-slate-700 dark:text-slate-300 font-bold">
-              {["SL", "3A", "2A", "1A", "CC", "2S"].map(cls => (
+              {["SL", "3A", "2A", "1A", "CC", "2S", "EC"].map(cls => (
                 <label key={cls} className="flex items-center gap-2 cursor-pointer hover:text-orange-500">
                   <input 
                     type="checkbox" 
@@ -205,7 +231,7 @@ export default function Results() {
                     onChange={() => toggleClassFilter(cls)}
                     className="accent-orange-500 cursor-pointer"
                   />
-                  <span>{cls === "SL" ? "Sleeper (SL)" : cls === "3A" ? "AC 3 Tier (3A)" : cls === "2A" ? "AC 2 Tier (2A)" : cls === "1A" ? "AC 1 Class (1A)" : cls === "CC" ? "AC Chair Car (CC)" : "Second Sitting (2S)"}</span>
+                  <span>{cls === "SL" ? "Sleeper (SL)" : cls === "3A" ? "AC 3 Tier (3A)" : cls === "2A" ? "AC 2 Tier (2A)" : cls === "1A" ? "AC 1 Class (1A)" : cls === "CC" ? "AC Chair Car (CC)" : cls === "EC" ? "Executive Chair (EC)" : "Second Sitting (2S)"}</span>
                 </label>
               ))}
             </div>
@@ -289,7 +315,7 @@ export default function Results() {
           {/* Summary Details Header */}
           <div className="bg-white dark:bg-[#131926]/90 border border-gray-200 dark:border-white/5 p-3.5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-bold text-slate-800 dark:text-white transition-colors duration-300">
             <div>
-              <span>{sortedRoutes.length} Route options for </span>
+              <span>{sortedRoutes.length} Route options found for </span>
               <span className="text-[#0f2954] dark:text-blue-400 font-extrabold">{source.split(" (")[0]} ➔ {destination.split(" (")[0]}</span>
               {date && <span> on {new Date(date).toDateString()}</span>}
             </div>
@@ -332,9 +358,17 @@ export default function Results() {
               const isExpanded = !!expandedCards[idx];
               const isDirect = route.changes === 0;
               
-              // Get first train details
+              // Get first and last train details
               const firstTrain = route.trains[0];
               const lastTrain = route.trains[route.trains.length - 1];
+
+              // Calculate active cumulative total fare dynamically
+              let totalRouteFare = 0;
+              route.trains.forEach((seg, sIdx) => {
+                const selClass = activeClass[`${idx}_${sIdx}`] || seg.class_details[0]?.class_type;
+                const clsDetail = seg.class_details.find(c => c.class_type === selClass);
+                if (clsDetail) totalRouteFare += clsDetail.fare;
+              });
 
               return (
                 <div
@@ -347,11 +381,11 @@ export default function Results() {
                       <span className="font-extrabold text-[#0f2954] dark:text-blue-400 text-sm">
                         {isDirect 
                           ? `${firstTrain.train_name} (${firstTrain.train_no})` 
-                          : `${firstTrain.train_name} → ${lastTrain.train_name} [Connecting]`
+                          : `${firstTrain.train_name} → ${lastTrain.train_name} [Connecting Route]`
                         }
                       </span>
                       <span className="text-[10px] bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded font-black tracking-wider uppercase">
-                        {isDirect ? "Direct Train" : `${route.changes} Swap Layovers`}
+                        {isDirect ? "Direct" : `${route.changes} Transfers`}
                       </span>
                     </div>
                     <div className="flex items-center gap-4 text-gray-500 dark:text-gray-400 font-semibold text-[10px]">
@@ -413,45 +447,60 @@ export default function Results() {
 
                   {/* IRCTC-style Class Fares Grid & Detail Switcher */}
                   <div className="p-5 space-y-4">
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="space-y-4">
                       {route.trains.map((seg, sIdx) => (
-                        <div
-                          key={sIdx}
-                          onClick={() => toggleExpand(idx)}
-                          className="border border-gray-200 dark:border-white/10 bg-slate-50 dark:bg-slate-950/40 p-3 rounded-xl text-left select-none cursor-pointer hover:border-blue-500 transition-all flex flex-col justify-between min-w-[150px] shadow-sm active:scale-98"
-                        >
-                          <span className="block text-[10px] font-extrabold text-[#0f2954] dark:text-blue-400">
-                            {travelClass === "SL" ? "Sleeper (SL)" : travelClass === "3A" ? "AC 3 Tier (3A)" : travelClass === "2A" ? "AC 2 Tier (2A)" : travelClass === "1A" ? "AC 1 Class (1A)" : travelClass === "CC" ? "AC Chair Car (CC)" : "Second Sitting (2S)"}
-                          </span>
-                          
-                          <span
-                            className={`block font-black text-xs uppercase my-1.5 ${
-                              (seg.availability_status || "").includes("AVAILABLE")
-                                ? "text-green-600 dark:text-green-400"
-                                : (seg.availability_status || "").includes("WL")
-                                  ? "text-amber-600 dark:text-amber-400"
-                                  : "text-red-500"
-                            }`}
-                          >
-                            {seg.availability_status || "AVAILABLE-0021"}
-                          </span>
-
-                          <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100 dark:border-white/5 mt-1 font-bold text-slate-800 dark:text-white">
-                            <span>₹{seg.fare || 240}</span>
-                            <span className="text-[9px] text-blue-500 dark:text-blue-400 uppercase tracking-widest flex items-center gap-0.5">
-                              <RefreshCw className="h-2.5 w-2.5" /> Refresh
+                        <div key={sIdx} className="space-y-2">
+                          {route.trains.length > 1 && (
+                            <span className="block text-[10px] font-black text-gray-400 uppercase tracking-wide">
+                              Segment {sIdx + 1}: {seg.train_name} ({seg.from_station} ➔ {seg.to_station})
                             </span>
+                          )}
+                          
+                          <div className="flex flex-wrap items-center gap-3">
+                            {seg.class_details
+                              .filter(c => selectedClasses.includes(c.class_type))
+                              .map((clsDetail) => {
+                                const isSelected = (activeClass[`${idx}_${sIdx}`] || seg.class_details[0]?.class_type) === clsDetail.class_type;
+                                
+                                return (
+                                  <button
+                                    key={clsDetail.class_type}
+                                    type="button"
+                                    onClick={() => handleSelectClass(idx, sIdx, clsDetail.class_type)}
+                                    className={`p-3 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between min-w-[130px] shadow-sm active:scale-98 select-none ${
+                                      isSelected
+                                        ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400 font-extrabold"
+                                        : "border-gray-200 dark:border-white/10 bg-slate-50 dark:bg-slate-950/40 text-slate-800 dark:text-slate-300 hover:border-blue-300"
+                                    }`}
+                                  >
+                                    <span className="block text-[9px] font-black uppercase text-gray-500">
+                                      {clsDetail.class_type === "SL" ? "Sleeper (SL)" : clsDetail.class_type === "3A" ? "AC 3 Tier (3A)" : clsDetail.class_type === "2A" ? "AC 2 Tier (2A)" : clsDetail.class_type === "1A" ? "AC 1 Class (1A)" : clsDetail.class_type === "CC" ? "AC Chair Car (CC)" : clsDetail.class_type === "EC" ? "Executive (EC)" : "2nd Sitting (2S)"}
+                                    </span>
+                                    
+                                    <span
+                                      className={`block font-black text-xs uppercase my-1 ${
+                                        clsDetail.availability_status.includes("AVAILABLE")
+                                          ? "text-green-600 dark:text-green-400"
+                                          : clsDetail.availability_status.includes("WL")
+                                            ? "text-amber-600 dark:text-amber-400"
+                                            : "text-red-500"
+                                      }`}
+                                    >
+                                      {clsDetail.availability_status}
+                                    </span>
+
+                                    <div className="flex items-center justify-between text-[10px] pt-1 border-t border-gray-200/50 dark:border-white/5 mt-1 font-bold">
+                                      <span>₹{clsDetail.fare}</span>
+                                      {clsDetail.confirm_probability && clsDetail.confirm_probability !== "N/A" && (
+                                        <span className="text-[9px] text-gray-400 font-medium ml-0.5">({clsDetail.confirm_probability}%)</span>
+                                      )}
+                                    </div>
+                                  </button>
+                                );
+                            })}
                           </div>
                         </div>
                       ))}
-
-                      {/* Cumulative Total Fare callout badge (connecting segments) */}
-                      {!isDirect && route.total_fare !== undefined && (
-                        <div className="ml-auto p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-xl text-center">
-                          <span className="block text-[8px] uppercase font-black tracking-widest leading-none">Total Fare</span>
-                          <span className="text-base font-black">₹{route.total_fare}</span>
-                        </div>
-                      )}
                     </div>
 
                     {/* Detailed Route Timeline (Layover wait details) */}
@@ -459,7 +508,12 @@ export default function Results() {
                       <div className="border-t border-gray-100 dark:border-white/5 pt-4 space-y-4 animate-slideDown text-xs text-slate-800 dark:text-slate-200">
                         <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/5 pb-2">
                           <span className="font-extrabold uppercase text-[10px] tracking-wider text-[#0f2954] dark:text-blue-400">Connection Journey Segments</span>
-                          <span className="text-[10px] text-gray-500">Wait times between layovers included</span>
+                          <div className="flex items-center gap-4">
+                            <span className="text-[10px] text-gray-500">Wait times between layovers included</span>
+                            <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-3 py-1 rounded-lg font-black text-xs">
+                              Combined Total Fare: ₹{totalRouteFare}
+                            </div>
+                          </div>
                         </div>
                         
                         <div className="relative pl-6 border-l-2 border-dashed border-gray-300 dark:border-white/10 space-y-6">
@@ -475,6 +529,10 @@ export default function Results() {
                               waitTime = Math.round((dep.getTime() - arr.getTime()) / 60000);
                             }
 
+                            // Retrieve active class details for this leg
+                            const legClass = activeClass[`${idx}_${sIdx}`] || seg.class_details[0]?.class_type;
+                            const legClsDetail = seg.class_details.find(c => c.class_type === legClass);
+
                             return (
                               <div key={sIdx} className="relative space-y-2">
                                 {/* Bullet indicator */}
@@ -484,7 +542,10 @@ export default function Results() {
 
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-slate-800 dark:text-slate-100 font-extrabold text-[13px]">
                                   <span>{seg.train_name} (#{seg.train_no})</span>
-                                  <span className="text-gray-500 font-medium text-xs">{seg.distance} km | {(seg.travel_time / 60).toFixed(1)} hrs</span>
+                                  <span className="text-gray-500 font-medium text-xs">
+                                    {seg.distance} km | {(seg.travel_time / 60).toFixed(1)} hrs 
+                                    {legClsDetail && <span className="ml-2 px-1.5 py-0.5 rounded bg-blue-500/10 text-[#213c7a] dark:text-blue-400 font-black text-[10px] border border-blue-500/20">{legClsDetail.class_type}</span>}
+                                  </span>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4 text-xs font-bold text-gray-600 dark:text-gray-400">
@@ -499,6 +560,16 @@ export default function Results() {
                                     <span className="block text-[10px] text-gray-500 font-semibold">{seg.arrival_time.substring(0,5)} | {seg.arrival_date}</span>
                                   </div>
                                 </div>
+
+                                {legClsDetail && (
+                                  <div className="flex items-center gap-4 text-[10px] text-gray-500 dark:text-gray-400 pt-1 font-bold">
+                                    <span>Fare: <span className="text-emerald-500 font-black">₹{legClsDetail.fare}</span></span>
+                                    <span>Seats: <span className={`font-black uppercase ${(legClsDetail.availability_status).includes("AVAILABLE") ? "text-green-500" : "text-amber-500"}`}>{legClsDetail.availability_status}</span></span>
+                                    {legClsDetail.confirm_probability && legClsDetail.confirm_probability !== "N/A" && (
+                                      <span>Conf. Probability: <span className="text-blue-500 font-black">{legClsDetail.confirm_probability}%</span></span>
+                                    )}
+                                  </div>
+                                )}
 
                                 {showTransfer && nextSeg && (
                                   <div className="bg-amber-500/5 border border-amber-500/10 p-3 rounded-xl text-amber-600 dark:text-amber-400 flex items-center justify-between text-xs font-semibold my-3">
@@ -517,8 +588,8 @@ export default function Results() {
                   {/* IRCTC-style Train Actions row */}
                   <div className="px-5 py-3 border-t border-gray-100 dark:border-white/5 flex items-center gap-3 bg-slate-50 dark:bg-slate-950/20">
                     <button
-                      onClick={() => alert("Booking functionality is integrated via IRCTC gateway.")}
-                      className="bg-[#fb731c] hover:bg-[#e05f0d] text-white px-5 py-2 rounded-xl text-xs font-extrabold uppercase shadow cursor-pointer transition-all active:scale-95"
+                      onClick={() => alert(`Booking confirmed. Total Charged: ₹${totalRouteFare}`)}
+                      className="bg-[#fb731c] hover:bg-[#e05f0d] text-white px-5 py-2 rounded-xl text-xs font-extrabold uppercase shadow cursor-pointer transition-all active:scale-95 animate-pulse"
                     >
                       Book Now
                     </button>
@@ -535,7 +606,7 @@ export default function Results() {
 
             {sortedRoutes.length === 0 && (
               <div className="text-center py-16 text-gray-500 text-xs bg-white dark:bg-[#131926]/90 border border-gray-200 dark:border-white/5 rounded-2xl">
-                No journey paths match your refine filters. Try clearing time slots.
+                No journey paths match your refine filters. Try clearing time slots or increasing max budget.
               </div>
             )}
           </div>

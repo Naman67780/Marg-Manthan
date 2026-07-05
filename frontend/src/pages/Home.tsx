@@ -35,7 +35,6 @@ export default function Home() {
     return today.toISOString().split("T")[0];
   });
   const [arrivalDeadline, setArrivalDeadline] = useState("");
-  const [travelClass, setTravelClass] = useState("SL");
   const [maxBudget, setMaxBudget] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -142,7 +141,7 @@ export default function Home() {
       return;
     }
 
-    navigate(`/results?source=${sourceCode}&destination=${destCode}&mode=${mode}&date=${journeyDate}&deadline=${arrivalDeadline}&class=${travelClass}&budget=${maxBudget}`);
+    navigate(`/results?source=${sourceCode}&destination=${destCode}&mode=${mode}&date=${journeyDate}&deadline=${arrivalDeadline}&budget=${maxBudget}`);
   };
 
   const selectPopular = (station: Station, type: "source" | "dest") => {
@@ -313,39 +312,19 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Class and Budget */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider mb-1.5">
-                    All Classes
-                  </label>
-                  <select
-                    value={travelClass}
-                    onChange={(e) => setTravelClass(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-300 dark:border-white/10 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:border-blue-600 focus:outline-none transition-all cursor-pointer"
-                  >
-                    <option value="SL">Sleeper (SL)</option>
-                    <option value="3A">AC 3 Tier (3A)</option>
-                    <option value="2A">AC 2 Tier (2A)</option>
-                    <option value="1A">AC 1 Class (1A)</option>
-                    <option value="CC">AC Chair Car (CC)</option>
-                    <option value="2S">Second Sitting (2S)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider mb-1.5">
-                    Max Budget (₹)
-                  </label>
-                  <input
-                    type="number"
-                    value={maxBudget}
-                    onChange={(e) => setMaxBudget(e.target.value)}
-                    placeholder="e.g. 1500"
-                    min="0"
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-300 dark:border-white/10 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:border-blue-600 focus:outline-none transition-all"
-                  />
-                </div>
+              {/* Budget */}
+              <div>
+                <label className="block text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider mb-1.5">
+                  Max Budget (₹) (Optional)
+                </label>
+                <input
+                  type="number"
+                  value={maxBudget}
+                  onChange={(e) => setMaxBudget(e.target.value)}
+                  placeholder="e.g. 1500"
+                  min="0"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-300 dark:border-white/10 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:border-blue-600 focus:outline-none transition-all"
+                />
               </div>
 
               {/* GENERAL / mode preference */}

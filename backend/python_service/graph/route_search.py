@@ -322,7 +322,8 @@ class RouteSearcher:
             "2A": 2.2,
             "1A": 3.8,
             "CC": 1.2,
-            "2S": 0.35
+            "2S": 0.35,
+            "EC": 2.8
         }
         rate = class_rates.get(class_type, 0.6)
         
@@ -334,7 +335,8 @@ class RouteSearcher:
             "2A": 500,
             "1A": 750,
             "CC": 220,
-            "2S": 60
+            "2S": 60,
+            "EC": 600
         }
         fare = base_fare + add_charges.get(class_type, 120)
         
@@ -355,7 +357,23 @@ class RouteSearcher:
         
         return fare, status, prob
 
-    def search(self, source: str, destination: str, mode: str = 'time', date: str = None, deadline: str = None, class_type: str = 'SL', budget: Optional[int] = None, rapidapi_key: Optional[str] = None, rapidapi_host: Optional[str] = None) -> List[Dict]:
+    def get_supported_classes(self, train_name: str) -> List[str]:
+        """Determine supported classes based on train name."""
+        name_upper = train_name.upper()
+        if "VANDE BHARAT" in name_upper or "VB" in name_upper:
+            return ["CC", "EC"]
+        if "SHATABDI" in name_upper:
+            return ["CC", "EC"]
+        if "RAJDHANI" in name_upper:
+            return ["3A", "2A", "1A"]
+        if "DURONTO" in name_upper:
+            return ["SL", "3A", "2A", "1A"]
+        if "GARIB RATH" in name_upper:
+            return ["3A", "CC"]
+        # Default for regular Express/Mail trains
+        return ["2S", "SL", "3A", "2A"]
+
+    def search(self, source: str, destination: str, mode: str = 'time', date: str = None, deadline: str = None, budget: Optional[int] = None, rapidapi_key: Optional[str] = None, rapidapi_host: Optional[str] = None) -> List[Dict]:
         """Main search method that routes to appropriate algorithm, validates constraints, fetches live seat/fares, and filters by budget."""
         # Default date to today if none is provided
         if not date:
@@ -391,33 +409,63 @@ class RouteSearcher:
         # Post-routing: fetch live seats & fares for all candidate routes
         valid_routes = []
         for route in all_routes:
-            total_fare = 0
+            # Step 1: Query/generate class details for each leg
             for leg in route['trains']:
                 train_no = leg['train_no']
                 from_code = leg['from_station']
                 to_code = leg['to_station']
                 dep_date = leg['departure_date'] # format: YYYY-MM-DD
                 
-                # Fetch live data
-                fare, status, prob = self._fetch_live_seats_and_fare(
-                    train_no, from_code, to_code, dep_date, class_type, rapidapi_key, rapidapi_host
+                supported = self.get_supported_classes(leg['train_name'])
+                primary_class = supported[0] if supported else "SL"
+                
+                # Fetch live data for the primary class (1 query per leg to respect rate limits)
+                live_fare, live_status, live_prob = self._fetch_live_seats_and_fare(
+                    train_no, from_code, to_code, dep_date, primary_class, rapidapi_key, rapidapi_host
                 )
                 
-                # Fallback if live fetch failed/returned 0
-                if fare == 0 or status is None:
-                    fare, status, prob = self._fallback_fare_and_seats(leg['distance'], class_type)
-                    
-                leg['fare'] = fare
-                leg['availability_status'] = status
-                leg['confirm_probability'] = prob
-                total_fare += fare
-                
-            route['total_fare'] = total_fare
+                class_details = []
+                for cls in supported:
+                    if cls == primary_class and live_fare > 0:
+                        class_details.append({
+                            "class_type": cls,
+                            "fare": live_fare,
+                            "availability_status": live_status,
+                            "confirm_probability": live_prob
+                        })
+                    else:
+                        fare, status, prob = self._fallback_fare_and_seats(leg['distance'], cls)
+                        class_details.append({
+                            "class_type": cls,
+                            "fare": fare,
+                            "availability_status": status,
+                            "confirm_probability": prob
+                        })
+                leg['class_details'] = class_details
             
-            # Apply budget constraint check
-            if budget is not None and total_fare > budget:
-                continue  # Discard routes that exceed budget
-                
+            # Step 2: Budget filtering
+            # Discard route if the absolute cheapest combination of classes exceeds the budget
+            if budget is not None:
+                cheapest_route_total = 0
+                for leg in route['trains']:
+                    cheapest_leg_fare = min(c['fare'] for c in leg['class_details'])
+                    cheapest_route_total += cheapest_leg_fare
+                    
+                if cheapest_route_total > budget:
+                    continue  # Route is unaffordable even at cheapest class combinations
+                    
+                # Prune individual class choices in each leg that cannot be combined under budget
+                for leg in route['trains']:
+                    other_legs_cheapest = 0
+                    for other_leg in route['trains']:
+                        if other_leg != leg:
+                            other_legs_cheapest += min(c['fare'] for c in other_leg['class_details'])
+                            
+                    leg['class_details'] = [
+                        c for c in leg['class_details'] 
+                        if c['fare'] + other_legs_cheapest <= budget
+                    ]
+            
             valid_routes.append(route)
             
         # Sort routes based on preference
